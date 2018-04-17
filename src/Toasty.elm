@@ -143,7 +143,6 @@ import Html.Keyed
 import Process
 import Time
 import Task
-import Random exposing (Seed)
 
 
 {-| Represents the stack of current toasts notifications. You can model a toast
@@ -163,7 +162,7 @@ to be as complex or simple as you want.
 
 -}
 type Stack a
-    = Stack (List ( Id, Status, a )) Seed
+    = Stack (List ( Id, Status, a )) Int
 
 
 {-| The internal message type used by the library. You need to tag and add it to your app messages.
@@ -266,7 +265,7 @@ delay time (Config cfg) =
 -}
 initialState : Stack a
 initialState =
-    Stack [] (Random.initialSeed 0)
+    Stack [] 0
 
 
 {-| Handles the internal messages. You need to wire it to your app update function
@@ -283,7 +282,7 @@ update config tagger msg model =
         (Config cfg) =
             config
 
-        (Stack toasts seed) =
+        (Stack toasts maxId) =
             model.toasties
     in
         case msg of
@@ -295,7 +294,7 @@ update config tagger msg model =
                     newStack =
                         List.filter (\( id, toast, status ) -> id /= targetId) toasts
                 in
-                    { model | toasties = (Stack newStack seed) } ! []
+                    { model | toasties = (Stack newStack maxId) } ! []
 
             TransitionOut targetId ->
                 let
@@ -309,7 +308,7 @@ update config tagger msg model =
                             )
                             toasts
                 in
-                    { model | toasties = Stack newStack seed }
+                    { model | toasties = Stack newStack maxId }
                         ! [ Task.perform (\_ -> tagger (Remove targetId)) (Process.sleep <| cfg.transitionOutDuration * Time.millisecond) ]
 
 
@@ -333,13 +332,13 @@ addToast config tagger toast ( model, cmd ) =
         (Config cfg) =
             config
 
-        (Stack toasts seed) =
+        (Stack toasts maxId) =
             model.toasties
 
-        ( newId, newSeed ) =
-            getNewId seed
+        newId =
+            maxId + 1
     in
-        { model | toasties = Stack (toasts ++ [ ( newId, Entered, toast ) ]) newSeed }
+        { model | toasties = Stack (toasts ++ [ ( newId, Entered, toast ) ]) newId }
             ! ([ cmd, Task.perform (\() -> tagger (TransitionOut newId)) (Process.sleep <| cfg.delay * Time.millisecond) ])
 
 
@@ -363,11 +362,6 @@ view config toastView tagger (Stack toasts seed) =
             text ""
         else
             Html.Keyed.ol cfg.containerAttrs <| List.map (\toast -> itemContainer config tagger toast toastView) toasts
-
-
-getNewId : Seed -> ( Id, Seed )
-getNewId seed =
-    Random.step (Random.int Random.minInt Random.maxInt) seed
 
 
 itemContainer : Config msg -> (Msg a -> msg) -> ( Id, Status, a ) -> (a -> Html msg) -> ( String, Html msg )
